@@ -101,6 +101,12 @@ def main() -> None:
 
     # ====== Crear gamepad virtual (uinput) ======
     device_capabilities = {
+        evdev_ecodes.EV_KEY: [
+            evdev_ecodes.BTN_DPAD_UP,
+            evdev_ecodes.BTN_DPAD_DOWN,
+            evdev_ecodes.BTN_DPAD_LEFT,
+            evdev_ecodes.BTN_DPAD_RIGHT,
+        ],
         evdev_ecodes.EV_ABS: [
             (
                 evdev_ecodes.ABS_HAT0X,
@@ -126,6 +132,11 @@ def main() -> None:
 
         previous_dpad_state = DpadState(hat_x=0, hat_y=0)
 
+        previous_up_is_pressed = False
+        previous_down_is_pressed = False
+        previous_left_is_pressed = False
+        previous_right_is_pressed = False
+
         while True:
             up_is_pressed = debounced_input_by_direction["up"].read_stable_is_pressed()
             left_is_pressed = debounced_input_by_direction[
@@ -145,13 +156,51 @@ def main() -> None:
                 right_is_pressed=right_is_pressed,
             )
 
-            # Emitir solo cambios
+            should_sync = False
+
+            # ====== Emitir botones (EV_KEY) ======
+            if up_is_pressed != previous_up_is_pressed:
+                virtual_gamepad.write(
+                    evdev_ecodes.EV_KEY, evdev_ecodes.BTN_DPAD_UP, int(up_is_pressed)
+                )
+                previous_up_is_pressed = up_is_pressed
+                should_sync = True
+
+            if down_is_pressed != previous_down_is_pressed:
+                virtual_gamepad.write(
+                    evdev_ecodes.EV_KEY,
+                    evdev_ecodes.BTN_DPAD_DOWN,
+                    int(down_is_pressed),
+                )
+                previous_down_is_pressed = down_is_pressed
+                should_sync = True
+
+            if left_is_pressed != previous_left_is_pressed:
+                virtual_gamepad.write(
+                    evdev_ecodes.EV_KEY,
+                    evdev_ecodes.BTN_DPAD_LEFT,
+                    int(left_is_pressed),
+                )
+                previous_left_is_pressed = left_is_pressed
+                should_sync = True
+
+            if right_is_pressed != previous_right_is_pressed:
+                virtual_gamepad.write(
+                    evdev_ecodes.EV_KEY,
+                    evdev_ecodes.BTN_DPAD_RIGHT,
+                    int(right_is_pressed),
+                )
+                previous_right_is_pressed = right_is_pressed
+                should_sync = True
+
+            # ====== Emitir HAT (EV_ABS) ======
             if current_dpad_state.hat_x != previous_dpad_state.hat_x:
                 virtual_gamepad.write(
                     evdev_ecodes.EV_ABS,
                     evdev_ecodes.ABS_HAT0X,
                     clamp_hat_value(current_dpad_state.hat_x),
                 )
+                should_sync = True
 
             if current_dpad_state.hat_y != previous_dpad_state.hat_y:
                 virtual_gamepad.write(
@@ -159,8 +208,9 @@ def main() -> None:
                     evdev_ecodes.ABS_HAT0Y,
                     clamp_hat_value(current_dpad_state.hat_y),
                 )
+                should_sync = True
 
-            if current_dpad_state != previous_dpad_state:
+            if should_sync:
                 virtual_gamepad.syn()
                 previous_dpad_state = current_dpad_state
 
